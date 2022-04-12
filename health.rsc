@@ -1,7 +1,7 @@
 # Script view health of device by Enternight
 # https://forummikrotik.ru/viewtopic.php?t=7924
 # tested on ROS 6.49.5
-# updated 2022/04/08
+# updated 2022/04/09
 
 :do {
     :local hddTotal [/system resource get total-hdd-space ];
@@ -27,9 +27,9 @@
     :if ($cpuZ     < 90) do={:set message ("$message \r\nCPU load $cpuZ%")}       else={:set message ("$message \r\n*Large CPU usage $cpuZ%*")}
     :if ($hddFree  > 6 ) do={:set message ("$message \r\nHDD free $hddFree%")}    else={:set message ("$message \r\n*Low free HDD $hddFree%*")}
     :if ($badBlock = 0 ) do={:set message ("$message \r\nBad blocks $badBlock%")} else={:set message ("$message \r\n*Present bad blocks $badBlock%*")}
-    :if ($memFree  > 17) do={:set message ("$message \r\nMemory free $memFree%")} else={:set message ("$message \r\n*Low free memory $memFree%*")}
+    :if ($memFree  > 17) do={:set message ("$message \r\nMem free $memFree%")}    else={:set message ("$message \r\n*Low free mem $memFree%*")}
     :if ([:len $volt]  > 0) do={:set message ("$message \r\nVoltage $inVolt V")}
-    :if ([:len $tempC] > 0) do={:set message ("$message \r\nTemperature $[system health get temperature] C")}
+    :if ([:len $tempC] > 0) do={:set message ("$message \r\nTemp $[system health get temperature] C")}
     :local routeISP  [/ip route find dst-address=0.0.0.0/0];
     :if ([:len $routeISP] > 0) do={  
         :foreach inetGate in=$routeISP do={
@@ -48,7 +48,7 @@
                 :local lowGbTxReport ((($txByte-($simpleGbTxReport*1073741824))*1000000000)/1048576);
                 :local gbRxReport ("$simpleGbRxReport.$[:pick $lowGbRxReport 0 2]");
                 :local gbTxReport ("$simpleGbTxReport.$[:pick $lowGbTxReport 0 2]");
-                :set message ("$message \r\nTraffic of '$interfaceISP'\r\nRx/Tx $gbRxReport/$gbTxReport Gb");
+                :set message ("$message \r\nTraffic via\r\n'$interfaceISP'\r\nRx/Tx $gbRxReport/$gbTxReport Gb");
             }
         }
     } else={:set message ("$message \r\nThere is no interface for internet access.")}
