@@ -1,29 +1,35 @@
 # Script view health of device by Enternight
 # https://forummikrotik.ru/viewtopic.php?t=7924
 # tested on ROS 6.49.5
-# updated 2022/04/21
+# updated 2022/04/22
 
 :do {
     :local hddTotal [/system resource get total-hdd-spac];
     :local hddFree  [/system resource get free-hdd-space];
-    :local badBlock [/system resource get bad-blocks    ];
-    :local memTotal [/system resource get total-memory  ];
-    :local memFree  [/system resource get free-memory   ];
-    :local cpuZ     [/system resource get cpu-load      ];
+    :local badBlock [/system resource get bad-blocks];
+    :local memTotal [/system resource get total-memory];
+    :local memFree  [/system resource get free-memory];
+    :local cpuA     [/system resource get cpu];
+    :local arhA     [/system resource get arch];
+    :local cpuZ     [/system resource get cpu-load];
     :local currFW   [/system routerbo get upgrade-firmwa];
     :local upgrFW   [/system routerbo get current-firmwa];
-    :local tempC    [/system health   get temperature   ];
-    :local volt     [/system health   get voltage       ];
+    :if ([/system resource get board-name]!="CHR") do={
+        :local tempC [/system health get temperature];
+        :local volt  [/system health get voltage];
+    }
     :local smplVolt ($volt/10);
     :local lowVolt  (($volt-($smplVolt*10))*10);
     :local inVolt   ("$smplVolt.$[:pick $lowVolt 0 3]");
     :set   hddFree  ($hddFree/($hddTotal/100));
     :set   memFree  ($memFree/($memTotal/100));
     :local message  "Health report:\r\nID $[system identity get name]";
+    :set   message  ("$message \r\nUptime $[system resource get uptime]");
     :set   message  ("$message \r\nModel $[system resource get board-name]");
+    :set   message  ("$message \r\nCPU $cpuA");
+    :set   message  ("$message \r\nArch $arhA");
     :set   message  ("$message \r\nROS v.$[system resource get version]");
     :if ($currFW != $upgrFW) do={set message ("$message \r\n*FW is not updated*")}
-    :set   message  ("$message \r\nUptime $[system resource get uptime]");
     :if ($cpuZ < 90) do={:set message ("$message \r\nCPU load $cpuZ%");
     } else={:set message ("$message \r\n*Large CPU usage $cpuZ%*")}
     :if ($memFree > 17) do={:set message ("$message \r\nMem free $memFree%");
@@ -43,17 +49,16 @@
         } else={:set message ("$message \r\n*Abnorm temp $tempC C*")}
     }
 
+    # Listing all gateways
     :local routeISP [/ip route find dst-address=0.0.0.0/0];
     :if ([:len $routeISP] > 0) do={
-
-        # Listing all gateways
         :local gwList [:toarray ""];
         :local count 0;
         :foreach inetGate in=$routeISP do={
             :local gwStatus [:tostr [/ip route get $inetGate gateway-status]];
             :if ([:len $gwStatus] > 0) do={
                 :if (([:len [:find $gwStatus "unreachable"]] = 0) && ([:len [:find $gwStatus "inactive"]] = 0)) do={
-    
+
                     # Formation of interface name
                     :local ifaceISP "";
                     :foreach idName in=[/interface find] do={
@@ -61,7 +66,7 @@
                         :if ([:len [find key=$ifName in=$gwStatus]] > 0) do={:set ifaceISP $ifName}
                     }
                     :if ([:len $ifaceISP] > 0) do={
-    
+
                         # Checking the interface for entering the Bridge
                         :if ([:len [/interface bridge find name=$ifaceISP]] > 0) do={
                             :local ipAddrGW [:tostr [/ip route get $inetGate gateway]];
@@ -72,15 +77,14 @@
                                 :local mcAddrGate [/ip arp get [find address=$ipAddrGW interface=$ifaceISP] mac-address];
                                 :if ($mcAddrGate~"[0-F][0-F]:[0-F][0-F]:[0-F][0-F]:[0-F][0-F]:[0-F][0-F]:[0-F][0-F]") do={
                                     :set ifaceISP [/interface bridge host get [find mac-address=$mcAddrGate] interface];
-
                                 } else={:set ifaceISP ""}
                             } else={:set ifaceISP ""}
                         }
                         :if ([:len $ifaceISP] > 0) do={
-    
+
                             # Checking the repetition of interface name
-                            :local check [:len [find key=$ifaceISP in=$gwList]];
-                            :if ($check = 0) do={
+                            :local checkIf [:len [find key=$ifaceISP in=$gwList]];
+                            :if ($checkIf = 0) do={
                                 :set ($gwList->$count) $ifaceISP;
                                 :set count ($count+1);
                                 :local rxByte [/interface get $ifaceISP rx-byte];
