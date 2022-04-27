@@ -2,9 +2,21 @@
 # Script uses ideas by Enternight, Sertik, drPioneer
 # https://forummikrotik.ru/viewtopic.php?p=84984#p84984
 # tested on ROS 6.49.5
-# updated 2022/04/25
+# updated 2022/04/27
 
 :do {
+    # Digit conversion function via SI-prefix
+    # How to use: :put [$NumSiPrefix 648007421264];
+    :local NumSiPrefix do={
+        :local inp [:tonum $1];
+        :local cnt 0;
+        :while ($inp > 1024) do={
+            :set $inp ($inp/1024);
+            :set $cnt ($cnt+1);
+        }
+        :return ($inp.[:pick [:toarray "B,Kb,Mb,Gb,Tb,Pb,Eb,Zb,Yb"] $cnt]);
+    }
+
     # Defining variables
     :local hddTotal [/system resource get total-hdd-spac];
     :local hddFree  [/system resource get free-hdd-space];
@@ -122,15 +134,9 @@
                             :if ($checkIf = 0) do={
                                 :set ($gwList->$count) $ifaceISP;
                                 :set count ($count+1);
-                                :local rxByte [/interface get $ifaceISP rx-byte];
-                                :local txByte [/interface get $ifaceISP tx-byte];
-                                :local simpleGbRxReport ($rxByte/1073741824);
-                                :local simpleGbTxReport ($txByte/1073741824);
-                                :local lowGbRxReport ((($rxByte-($simpleGbRxReport*1073741824))*1000000000)/1048576);
-                                :local lowGbTxReport ((($txByte-($simpleGbTxReport*1073741824))*1000000000)/1048576);
-                                :local gbRxReport ("$simpleGbRxReport.$[:pick $lowGbRxReport 0 2]");
-                                :local gbTxReport ("$simpleGbTxReport.$[:pick $lowGbTxReport 0 2]");
-                                :set message ("$message\r\nTraffic via:\r\n'$ifaceISP'\r\nRx/Tx $gbRxReport/$gbTxReport Gb");
+                                :local gbRxReport [$NumSiPrefix [/interface get $ifaceISP rx-byte]];
+                                :local gbTxReport [$NumSiPrefix [/interface get $ifaceISP tx-byte]];
+                                :set message ("$message\r\nTraffic via:\r\n'$ifaceISP'\r\nRx/Tx $gbRxReport/$gbTxReport");
                             }
                         }
                     }
