@@ -2,7 +2,7 @@
 # Script uses ideas by Enternight, Sertik, drPioneer
 # https://forummikrotik.ru/viewtopic.php?p=84984#p84984
 # tested on ROS 6.49.5
-# updated 2022/07/21
+# updated 2022/07/22
 
 :do {
     # Digit conversion function via SI-prefix
@@ -20,6 +20,9 @@
     # Defining variables
     :local tempC    0;
     :local volt     0;
+    :local smplVolt 0;
+    :local lowVolt  0;
+    :local inVolt   0;
     :local hddTotal 0;
     :local hddFree  0;
     :local badBlock 0;
@@ -42,9 +45,9 @@
             :set tempC [/system health get temperature];
             :set volt  [/system health get voltage];
         }
-    :local smplVolt ($volt/10);
-    :local lowVolt  (($volt-($smplVolt*10))*10);
-    :local inVolt   ("$smplVolt.$[:pick $lowVolt 0 3]");
+        :set smplVolt ($volt/10);
+        :set lowVolt (($volt-($smplVolt*10))*10);
+        :set inVolt ("$smplVolt.$[:pick $lowVolt 0 3]");
     } on-error={
         :put ("Error defining variables");
         :log warning ("Error defining variables");
@@ -53,14 +56,14 @@
 
     # General information
     :do {
-        :set   message  ("$message\r\nuptime $[system resource get uptime]");
-        :set   message  ("$message\r\nmodel $[system resource get board-name]");
-        :set   message  ("$message\r\nROS $[system resource get version]");
+        :set message ("$message\r\nuptime $[system resource get uptime]");
+        :set message ("$message\r\nmodel $[system resource get board-name]");
+        :set message ("$message\r\nROS $[system resource get version]");
         :if ($currFW!=$upgrFW) do={:set message ("$message\r\n*FW not updated*")}
-        :set   message  ("$message\r\narch $[/system resource get arch]");
-        :set   message  ("$message\r\nCPU $[/system resource get cpu]");
-        :set   hddFree  ($hddFree/($hddTotal/100));
-        :set   memFree  ($memFree/($memTotal/100));
+        :set message ("$message\r\narch $[/system resource get arch]");
+        :set message ("$message\r\nCPU $[/system resource get cpu]");
+        :set hddFree ($hddFree/($hddTotal/100));
+        :set memFree ($memFree/($memTotal/100));
         :if ($cpuZ<90) do={:set message ("$message\r\nCPU load $cpuZ%");
         } else={:set message ("$message\r\n*large CPU usage $cpuZ%*")}
         :if ($memFree>17) do={:set message ("$message\r\nmem free $memFree%");
@@ -92,22 +95,21 @@
             :foreach pppTps in=$pppTypes do={ 
                 :local pppType ($pppTps.$pppInt);
                 :foreach pppConn in=[[:parse "[/interface $pppType find]"]] do={
-                    :local vpnName  [[:parse "[/interface $pppType get $pppConn name]"]];
-                    :local vpnComm  [[:parse "[/interface $pppType get $pppConn comment]"]];
-                    :local callrID  "";
+                    :local vpnName [[:parse "[/interface $pppType get $pppConn name]"]];
+                    :local vpnComm [[:parse "[/interface $pppType get $pppConn comment]"]];
+                    :local callrID "";
                     :if ($pppType~"-server") do={:set callrID  [[:parse "[/interface $pppType get $pppConn client-address]"]]}
                     :local vpnType [/interface get $vpnName type];
                     :local iType $vpnType;
-                    :local connTo  "";
+                    :local connTo "";
                     :set vpnType [:pick $vpnType ([:find $vpnType "-"] +1) [:len $vpnType]];
                     :if ($vpnType="out" && $iType!="ppp-out") do={
-                        :set connTo ("to $[[:parse "[/interface $pppType get $vpnName connect-to]"]]");
-                    }
+                        :set connTo ("to $[[:parse "[/interface $pppType get $vpnName connect-to]"]]")}
                     :local vpnState [[:parse "[/interface $pppType monitor $pppConn once as-value]"]];
                     :local vpnStatu ($vpnState->"status");
-                    :local locAddr  ($vpnState->"local-address");
-                    :local remAddr  ($vpnState->"remote-address");
-                    :local upTime   ($vpnState->"uptime");
+                    :local locAddr ($vpnState->"local-address");
+                    :local remAddr ($vpnState->"remote-address");
+                    :local upTime ($vpnState->"uptime");
                     :if ([:len [find key="terminating" in=$vpnStatu]] > 0) do={:set vpnStatu "disabled"}
                     :if ([:typeof $vpnStatu]="nothing") do={:set vpnStatu "unplugged"}
                     :if ($vpnStatu!="unplugged" && $vpnStatu!="disabled") do={
