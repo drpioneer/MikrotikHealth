@@ -46,13 +46,13 @@
         :local volt     ([/system health   print as-value]->"voltage");
         :local tempC    ([/system health   print as-value]->"temperature");
         :if ([:pick $ros 0 1]="7") do={:set tempC ([/system health print as-value]->0->"value")}
-        :local msg ("Id $ident\r\nUpt $uptime\r\nBrd $board\r\nRos $ros");
+        :local msg ("Id $ident\r\nBrd $board\r\nRos $ros");
         :if ($currFW!=$upgrFW) do={:set msg ("$msg\r\n**Fw not updated")}
         :set msg ("$msg\r\nArch $arch\r\nCpu $cpu");
         :if ($cpuZ<90) do={:set msg ("$msg\r\nCpuLoad $cpuZ%");
         } else={:set msg ("$msg\r\n**large Cpu usage $cpuZ%")}
          :set memFree ($memFree/($memTotal/100));
-        :if ($memFree>17) do={:set msg ("$msg\r\nMemfree $memFree%");
+        :if ($memFree>17) do={:set msg ("$msg\r\nMemFree $memFree%");
         } else={:set msg ("$msg\r\n**low free Mem $memFree%")}
         :set hddFree ($hddFree/($hddTotal/100));
         :if ($hddFree>6) do={:set msg ("$msg\r\nHddFree $hddFree%");
@@ -72,7 +72,7 @@
             :if ($tempC<70) do={:set msg ("$msg\r\nTemp $tempC C");
             } else={:set msg ("$msg\r\n**abnorm Temp $tempC C")}
         }
-        return $msg;
+        return "$msg\r\nUpt $uptime";
     }
 
     # ----------------------------------------------------------------- # ppp info reading function
@@ -130,7 +130,7 @@
     }
 
     # ----------------------------------------------------------------- # main body
-    :local message (">>>HealthRep:\r\n$[$GenInfo]\r\nExtIp $[$ExtIP]$[$PPPInfo]$[$GwInfo]");
+    :local message (">>>HealthRep:\r\n$[$GenInfo]$[$PPPInfo]$[$GwInfo]\r\n>>>ExternIp\r\n$[$ExtIP]");
     /system script environment remove [find name~"DEL"];                # clearing memory
     :log warning $message;
     :put $message;
