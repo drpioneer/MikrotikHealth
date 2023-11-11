@@ -1,190 +1,141 @@
 # Device status view script
-# Script uses ideas by Enternight, Sertik, drPioneer
-# https://forummikrotik.ru/viewtopic.php?p=84984#p84984
-# tested on ROS 6.49.5
-# updated 2022/07/22
+# Script uses ideas by Enternight, Jotne, rextended, Sertik, Brook, drPioneer
+# https://forummikrotik.ru/viewtopic.php?p=91302#p91302
+# tested on ROS 6.49.10 & 7.12
+# updated 2023/11/11
 
 :do {
-    # Digit conversion function via SI-prefix
-    # How to use: :put [$NumSiPrefix 648007421264];
-    :local NumSiPrefix do={
-        :local inp [:tonum $1];
-        :local cnt 0;
-        :while ($inp>1024) do={
-            :set $inp ($inp>>10);
-            :set $cnt ($cnt+1);
-        }
-        :return ($inp.[:pick [:toarray "B,Kb,Mb,Gb,Tb,Pb,Eb,Zb,Yb"] $cnt]);
+    # ----------------------------------------------------------------- # digit conversion function via SI-prefix
+    :global NumSiPrefixDEL do={                                         # https://forum.mikrotik.com/viewtopic.php?t=182904#p910512
+        :local inp [:tonum $1]; :local cnt 0;
+        :while ($inp>1024) do={:set $inp ($inp>>10); :set $cnt ($cnt+1)}
+        :return ($inp.[:pick [:toarray "b,Kb,Mb,Gb,Tb,Pb,Eb,Zb,Yb"] $cnt]);
     }
 
-    # Defining variables
-    :local tempC    0;
-    :local volt     0;
-    :local smplVolt 0;
-    :local lowVolt  0;
-    :local inVolt   0;
-    :local hddTotal 0;
-    :local hddFree  0;
-    :local badBlock 0;
-    :local memTotal 0;
-    :local memFree  0;
-    :local cpuZ     0;
-    :local currFW   "";
-    :local upgrFW   "";
-
-    :do {
-        :set hddTotal [/system resource get total-hdd-spac];
-        :set hddFree  [/system resource get free-hdd-space];
-        :set badBlock [/system resource get bad-blocks];
-        :set memTotal [/system resource get total-memory];
-        :set memFree  [/system resource get free-memory];
-        :set cpuZ     [/system resource get cpu-load];
-        :set currFW   [/system routerbo get upgrade-firmwa];
-        :set upgrFW   [/system routerbo get current-firmwa];
-        :if ([/system resource get board-name]!="CHR") do={
-            :set tempC [/system health get temperature];
-            :set volt  [/system health get voltage];
+    # ----------------------------------------------------------------- # external IP address return function (in case of double NAT)
+    :local ExtIP do={                                                   # https://forummikrotik.ru/viewtopic.php?p=65345#p65345
+        :local urlString "http://checkip.dyndns.org";
+        :local httpResp ""; :local cnt 0;
+        :do {
+            :do {:set httpResp [/tool fetch mode=http url=$urlString as-value output=user]} on-error={}
+            :set cnt ($cnt+1);
+        } while ([:len $httpResp]=0 && cnt<4);
+        :if ([:len $httpResp]!=0) do={
+            :local content ($httpResp->"data");
+            :if ([:len $content]!=0) do={:return [:pick $content ([:find $content "dress: " -1] +7) [:find $content "</body>" -1]]}
         }
-        :set smplVolt ($volt/10);
-        :set lowVolt (($volt-($smplVolt*10))*10);
-        :set inVolt ("$smplVolt.$[:pick $lowVolt 0 3]");
-    } on-error={
-        :put ("Error defining variables");
-        :log warning ("Error defining variables");
+        :return "NotRespond";
     }
-    :local message  ">>>Health report:\r\nID $[system identity get name]";
 
-    # General information
-    :do {
-        :set message ("$message\r\nuptime $[system resource get uptime]");
-        :set message ("$message\r\nmodel $[system resource get board-name]");
-        :set message ("$message\r\nROS $[system resource get version]");
-        :if ($currFW!=$upgrFW) do={:set message ("$message\r\n*FW not updated*")}
-        :set message ("$message\r\narch $[/system resource get arch]");
-        :set message ("$message\r\nCPU $[/system resource get cpu]");
+    # ----------------------------------------------------------------- # general info reading function
+    :local GenInfo do={                                                 # https://forummikrotik.ru/viewtopic.php?p=45743#p45743
+        :local ident    ([/system identity print as-value]->"name");
+        :local uptime   ([/system resource print as-value]->"uptime");
+        :local arch     ([/system resource print as-value]->"architecture-name");
+        :local cpu      ([/system resource print as-value]->"cpu");
+        :local hddTotal ([/system resource print as-value]->"total-hdd-space");
+        :local hddFree  ([/system resource print as-value]->"free-hdd-space");
+        :local badBlock ([/system resource print as-value]->"bad-blocks");
+        :local memTotal ([/system resource print as-value]->"total-memory");
+        :local memFree  ([/system resource print as-value]->"free-memory");
+        :local cpuZ     ([/system resource print as-value]->"cpu-load");
+        :local currFW   ([/system routerbo print as-value]->"current-firmware");
+        :local upgrFW   ([/system routerbo print as-value]->"upgrade-firmware");
+        :local ros      ([/system resource print as-value]->"version");
+        :local board    ([/system resource print as-value]->"board-name");
+        :local volt     ([/system health   print as-value]->"voltage");
+        :local tempC    ([/system health   print as-value]->"temperature");
+        :if ([:pick $ros 0 1]="7") do={:set tempC ([/system health print as-value]->0->"value")}
+        :local msg ("Id $ident\r\nUpt $uptime\r\nBrd $board\r\nRos $ros");
+        :if ($currFW!=$upgrFW) do={:set msg ("$msg\r\n**Fw not updated")}
+        :set msg ("$msg\r\nArch $arch\r\nCpu $cpu");
+        :if ($cpuZ<90) do={:set msg ("$msg\r\nCpuLoad $cpuZ%");
+        } else={:set msg ("$msg\r\n**large Cpu usage $cpuZ%")}
+         :set memFree ($memFree/($memTotal/100));
+        :if ($memFree>17) do={:set msg ("$msg\r\nMemfree $memFree%");
+        } else={:set msg ("$msg\r\n**low free Mem $memFree%")}
         :set hddFree ($hddFree/($hddTotal/100));
-        :set memFree ($memFree/($memTotal/100));
-        :if ($cpuZ<90) do={:set message ("$message\r\nCPU load $cpuZ%");
-        } else={:set message ("$message\r\n*large CPU usage $cpuZ%*")}
-        :if ($memFree>17) do={:set message ("$message\r\nmem free $memFree%");
-        } else={:set message ("$message\r\n*low free mem $memFree%*")}
-        :if ($hddFree>6) do={:set message ("$message\r\nHDD free $hddFree%");
-        } else={:set message ("$message\r\n*low free HDD $hddFree%*")}
+        :if ($hddFree>6) do={:set msg ("$msg\r\nHddFree $hddFree%");
+        } else={:set msg ("$msg\r\n**low free Hdd $hddFree%")}
         :if ([:len $badBlock]>0) do={
-            :if ($badBlock=0) do={:set message ("$message\r\nbad blocks $badBlock%");
-            } else={:set message ("$message\r\n*present bad blocks $badBlock%*")}
+            :if ($badBlock=0) do={:set msg ("$msg\r\nBadBlck $badBlock%");
+            } else={:set msg ("$msg\r\n**present Bad blocks $badBlock%")}
         }
-        :if ($volt>0) do={
-            :if ($smplVolt>4 && $smplVolt<50) do={:set message ("$message\r\nvoltage $inVolt V");
-            } else={:set message ("$message\r\n*bad voltage $inVolt V*")}
+        :if ([:len $volt]>0) do={
+            :local smplVolt ($volt/10);
+            :local lowVolt (($volt-($smplVolt*10))*10);
+            :local inVolt ("$smplVolt.$[:pick $lowVolt 0 3]");
+            :if ($smplVolt>4 && $smplVolt<53) do={:set msg ("$msg\r\nPwr $inVolt V");
+            } else={:set msg ("$msg\r\n**bad Pwr $inVolt V")}
         }
-        :if ($tempC>0) do={
-            :if ($tempC>4 && $tempC<50) do={:set message ("$message\r\ntemperature $tempC C");
-            } else={:set message ("$message\r\n*abnorm temp $tempC C*")}
+        :if ([:len $tempC]>0) do={
+            :if ($tempC<70) do={:set msg ("$msg\r\nTemp $tempC C");
+            } else={:set msg ("$msg\r\n**abnorm Temp $tempC C")}
         }
-    } on-error={
-        :put ("Error general information");
-        :log warning ("Error general information");
+        return $msg;
     }
 
-    # Connections information
-    :do {
-        :local pppInteract {"-client";"-server"};
-        :local pppTypes {"l2tp";"pptp";"ovpn";"ppp";"sstp";"pppoe"};
-        :foreach pppInt in=$pppInteract do={ 
-            :foreach pppTps in=$pppTypes do={ 
+    # ----------------------------------------------------------------- # ppp info reading function
+    :local PPPInfo do={
+        :local msg ""; :local cnt 1;
+        :foreach pppInt in={"-client";"-server"} do={ 
+            :foreach pppTps in={"l2tp";"pptp";"ovpn";"ppp";"sstp";"pppoe"} do={ 
                 :local pppType ($pppTps.$pppInt);
                 :foreach pppConn in=[[:parse "[/interface $pppType find]"]] do={
-                    :local vpnName [[:parse "[/interface $pppType get $pppConn name]"]];
-                    :local vpnComm [[:parse "[/interface $pppType get $pppConn comment]"]];
-                    :local callrID "";
+                    :local vpnName  [[:parse "[/interface $pppType get $pppConn name]"]];
+                    :local vpnComm  [[:parse "[/interface $pppType get $pppConn comment]"]];
+                    :local callrID ""; :local connTo "";
                     :if ($pppType~"-server") do={:set callrID  [[:parse "[/interface $pppType get $pppConn client-address]"]]}
-                    :local vpnType [/interface get $vpnName type];
+                    :local vpnType  [/interface get $vpnName type];
                     :local iType $vpnType;
-                    :local connTo "";
                     :set vpnType [:pick $vpnType ([:find $vpnType "-"] +1) [:len $vpnType]];
-                    :if ($vpnType="out" && $iType!="ppp-out") do={
-                        :set connTo ("to $[[:parse "[/interface $pppType get $vpnName connect-to]"]]")}
+                    :if ($pppTps!="pppoe" && $vpnType="out" && $iType!="ppp-out") do={
+                        :set connTo ("$[[:parse "[/interface $pppType get $vpnName connect-to]"]]")}
                     :local vpnState [[:parse "[/interface $pppType monitor $pppConn once as-value]"]];
                     :local vpnStatu ($vpnState->"status");
-                    :local locAddr ($vpnState->"local-address");
-                    :local remAddr ($vpnState->"remote-address");
-                    :local upTime ($vpnState->"uptime");
-                    :if ([:len [find key="terminating" in=$vpnStatu]] > 0) do={:set vpnStatu "disabled"}
+                    :local locAddr  ($vpnState->"local-address");
+                    :local remAddr  ($vpnState->"remote-address");
+                    :local upTime   ($vpnState->"uptime");
+                    :if ([:len [find key="terminating" in=$vpnStatu]]>0) do={:set vpnStatu "disabled"}
                     :if ([:typeof $vpnStatu]="nothing") do={:set vpnStatu "unplugged"}
                     :if ($vpnStatu!="unplugged" && $vpnStatu!="disabled") do={
-                        :set message ("$message\r\n>>>Connect info:\r\n'$vpnName'\r\ntype $pppType");
-                        :if ([:len $callrID]>0) do={:set message ("$message\r\nfrom $callrID")}
-                        :if ([:len $connTo ]>0) do={:set message ("$message\r\n$connTo")}
-                        :if ([:len $vpnComm]>0) do={:set message ("$message\r\nComment $vpnComm")}
-                        :set message ("$message\r\nlcl $locAddr\r\nrmt $remAddr\r\nuptime $upTime");
+                        :set msg ("$msg\r\n>>>PPPinfo$cnt:\r\nTyp $pppType\r\nNam $vpnName");
+                        :if ([:len $callrID]>0) do={:set msg ("$msg\r\nFrm $callrID")}
+                        :if ([:len $connTo ]>0) do={:set msg ("$msg\r\nTo $connTo")}
+                        :if ([:len $vpnComm]>0) do={:set msg ("$msg\r\nCmnt $vpnComm")}
+                        :set msg ("$msg\r\nLcl $locAddr\r\nRmt $remAddr\r\nUpt $upTime");
+                        :set cnt (cnt+1);
                     }
                 }
             }
         }
-    } on-error={
-        :put ("Error connection information");
-        :log warning ("Error connection information");
+        :return $msg;
     }
 
-    # Gateways information
-    :do {
-        :local routeISP [/ip route find dst-address=0.0.0.0/0];
-        :if ([:len $routeISP]>0) do={
-            :local gwList [:toarray ""];
-            :local count 0;
-            :foreach inetGate in=$routeISP do={
-                :local gwStatus [:tostr [/ip route get $inetGate gateway-status]];
-                :if ([:len $gwStatus]>0) do={
-                    :if ([:len [:find $gwStatus "unreachable"]]=0 && [:len [:find $gwStatus "inactive"]]=0) do={
-    
-                        # Formation of interface name
-                        :local ifaceISP "";
-                        :foreach idName in=[/interface find] do={
-                            :local ifName [/interface get $idName name];
-                            :if ([:len [find key=$ifName in=$gwStatus]]>0) do={:set ifaceISP $ifName}
-                        }
-                        :if ([:len $ifaceISP]>0) do={
-    
-                            # Checking the interface for entering the Bridge
-                            :if ([:len [/interface bridge find name=$ifaceISP]]>0) do={
-                                :local ipAddrGW [:tostr [/ip route get $inetGate gateway]];
-                                :if ([:find $ipAddrGW "%"]>0) do={
-                                    :set $ipAddrGW [:pick $ipAddrGW ([:len [:pick $ipAddrGW 0 [:find $ipAddrGW "%"]] ] +1) [:len $ipAddrGW]];
-                                }
-                                :if ($ipAddrGW~"[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}") do={
-                                    :local mcAddrGate [/ip arp get [find address=$ipAddrGW interface=$ifaceISP] mac-address];
-                                    :if ($mcAddrGate~"[0-F][0-F]:[0-F][0-F]:[0-F][0-F]:[0-F][0-F]:[0-F][0-F]:[0-F][0-F]") do={
-                                        :set ifaceISP [/interface bridge host get [find mac-address=$mcAddrGate] interface];
-                                    } else={:set ifaceISP ""}
-                                } else={:set ifaceISP ""}
-                            }
-                            :if ([:len $ifaceISP] > 0) do={
-    
-                                # Checking the repetition of interface name
-                                :local checkIf [:len [find key=$ifaceISP in=$gwList]];
-                                :if ($checkIf=0) do={
-                                    :set ($gwList->$count) $ifaceISP;
-                                    :set count ($count+1);
-                                    :local gbRxReport [$NumSiPrefix [/interface get $ifaceISP rx-byte]];
-                                    :local gbTxReport [$NumSiPrefix [/interface get $ifaceISP tx-byte]];
-                                    :set message ("$message\r\n>>>Traffic via:\r\n'$ifaceISP'\r\nrx/tx $gbRxReport/$gbTxReport");
-                                }
-                            }
-                        }
-                    }
-                }
+    # ----------------------------------------------------------------- # gateways info reading function
+    :local GwInfo do={
+        :global NumSiPrefixDEL;
+        :local routeISP [/ip route find dst-address="0.0.0.0/0"];
+        :if ([:len $routeISP]=0) do={:return "WAN not found"}
+        :local msg "";
+        :foreach inetGate in=$routeISP do={
+            :local ifGate [:tostr [/ip route get $inetGate vrf-interface]];
+            :if ([:len $ifGate]>0) do={
+                :local rxReport [$NumSiPrefixDEL [/interface get [find name=$ifGate] rx-byte]];
+                :local txReport [$NumSiPrefixDEL [/interface get [find name=$ifGate] tx-byte]];
+                :set msg ("$msg\r\n>>>TraffVia:\r\n'$ifGate'\r\nrx/tx $rxReport/$txReport");
             }
-        } else={:set message ("$message\r\nWAN iface not found")}
-    } on-error={
-        :put ("Error gateways information");
-        :log warning ("Error gateways information");
+        }
+        :return $msg;
     }
 
-    # Output of message
-    :put $message;
+    # ----------------------------------------------------------------- # main body
+    :local message (">>>HealthRep:\r\n$[$GenInfo]\r\nExtIp $[$ExtIP]$[$PPPInfo]$[$GwInfo]");
+    /system script environment remove [find name~"DEL"];                # clearing memory
     :log warning $message;
+    :put $message;
 } on-error={
+    /system script environment remove [find name~"DEL"];                # clearing memory
     :log warning ("Error, can't show health status");
     :put ("Error, can't show health status");
 }
