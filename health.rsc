@@ -2,11 +2,11 @@
 # Script uses ideas by Enternight, Jotne, rextended, Sertik, Brook, drPioneer
 # https://forummikrotik.ru/viewtopic.php?p=91302#p91302
 # tested on ROS 6.49.10 & 7.12
-# updated 2023/11/11
+# updated 2023/11/12
 
 :do {
     # ----------------------------------------------------------------- # digit conversion function via SI-prefix
-    :global NumSiPrefixDEL do={                                         # https://forum.mikrotik.com/viewtopic.php?t=182904#p910512
+    :global NumSiPrefixHLT do={                                         # https://forum.mikrotik.com/viewtopic.php?t=182904#p910512
         :local inp [:tonum $1]; :local cnt 0;
         :while ($inp>1024) do={:set $inp ($inp>>10); :set $cnt ($cnt+1)}
         :return ($inp.[:pick [:toarray "b,Kb,Mb,Gb,Tb,Pb,Eb,Zb,Yb"] $cnt]);
@@ -114,15 +114,15 @@
 
     # ----------------------------------------------------------------- # gateways info reading function
     :local GwInfo do={
-        :global NumSiPrefixDEL;
+        :global NumSiPrefixHLT;
         :local routeISP [/ip route find dst-address="0.0.0.0/0"];
         :if ([:len $routeISP]=0) do={:return "WAN not found"}
         :local msg "";
         :foreach inetGate in=$routeISP do={
             :local ifGate [:tostr [/ip route get $inetGate vrf-interface]];
             :if ([:len $ifGate]>0) do={
-                :local rxReport [$NumSiPrefixDEL [/interface get [find name=$ifGate] rx-byte]];
-                :local txReport [$NumSiPrefixDEL [/interface get [find name=$ifGate] tx-byte]];
+                :local rxReport [$NumSiPrefixHLT [/interface get [find name=$ifGate] rx-byte]];
+                :local txReport [$NumSiPrefixHLT [/interface get [find name=$ifGate] tx-byte]];
                 :set msg ("$msg\r\n>>>TraffVia:\r\n'$ifGate'\r\nrx/tx $rxReport/$txReport");
             }
         }
@@ -131,11 +131,11 @@
 
     # ----------------------------------------------------------------- # main body
     :local message (">>>HealthRep:\r\n$[$GenInfo]$[$PPPInfo]$[$GwInfo]\r\n>>>ExternIp\r\n$[$ExtIP]");
-    /system script environment remove [find name~"DEL"];                # clearing memory
+    /system script environment remove [find name~"HLT"];                # clearing memory
     :log warning $message;
     :put $message;
 } on-error={
-    /system script environment remove [find name~"DEL"];                # clearing memory
+    /system script environment remove [find name~"HLT"];                # clearing memory
     :log warning ("Error, can't show health status");
     :put ("Error, can't show health status");
 }
