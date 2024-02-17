@@ -1,5 +1,6 @@
 # Device status view script
 # Script uses ideas by Enternight, Jotne, rextended, Sertik, Brook, drPioneer
+# https://github.com/drpioneer/MikrotikHealth/blob/main/health.rsc
 # https://forummikrotik.ru/viewtopic.php?p=91302#p91302
 # tested on ROS 6.49.10 & 7.12
 # updated 2024/02/17
@@ -14,8 +15,7 @@
     } while ([:len $httpResp]=0 && cnt<4);
     :if ([:len $httpResp]!=0) do={
       :local content ($httpResp->"data");
-      :if ([:len $content]!=0) do={:return [:pick $content ([:find $content "dress: " -1] +7) [:find $content "</body>" -1]]}
-    }
+      :if ([:len $content]!=0) do={:return [:pick $content ([:find $content "dress: " -1] +7) [:find $content "</body>" -1]]}}
     :return "NotRespond";
   }
 
@@ -51,15 +51,12 @@
     :set hddFree ($hddFree/($hddTotal/100));
     :if ($hddFree>6) do={:set msg "$msg\r\nHddFree $hddFree%"} else={:set msg "$msg\r\n**low free Hdd $hddFree%"}
     :if ([:len $badBlock]>0) do={
-      :if ($badBlock=0) do={:set msg "$msg\r\nBadBlck $badBlock%"} else={:set msg "$msg\r\n**present Bad blocks $badBlock%"}
-    }
+      :if ($badBlock=0) do={:set msg "$msg\r\nBadBlck $badBlock%"} else={:set msg "$msg\r\n**present Bad blocks $badBlock%"}}
     :if ([:len $volt]>0) do={
       :local smplVolt ($volt/10); :local lowVolt (($volt-$smplVolt*10)*10); :local inVolt "$smplVolt.$[:pick $lowVolt 0 3]";
-      :if ($smplVolt>4 && $smplVolt<53) do={:set msg "$msg\r\nPwr $inVolt V"} else={:set msg "$msg\r\n**bad Pwr $inVolt V"}
-    }
+      :if ($smplVolt>4 && $smplVolt<53) do={:set msg "$msg\r\nPwr $inVolt V"} else={:set msg "$msg\r\n**bad Pwr $inVolt V"}}
     :if ([:len $tempC]>0) do={
-      :if ($tempC<70) do={:set msg "$msg\r\nTemp $tempC C"} else={:set msg "$msg\r\n**abnorm Temp $tempC C"}
-    }
+      :if ($tempC<70) do={:set msg "$msg\r\nTemp $tempC C"} else={:set msg "$msg\r\n**abnorm Temp $tempC C"}}
     :return "$msg\r\nUpt $uptime";
   }
 
@@ -91,11 +88,7 @@
             :if ([:len $connTo ]>0) do={:set msg "$msg\r\nTo $connTo"}
             :if ([:len $vpnComm]>0) do={:set msg "$msg\r\nCmnt $vpnComm"}
             :set msg ("$msg\r\nLcl $locAddr\r\nRmt $remAddr\r\nUpt $upTime");
-            :set cnt (cnt+1);
-          }
-        }
-      }
-    }
+            :set cnt (cnt+1)}}}}
     :return $msg;
   }
 
@@ -106,8 +99,7 @@
       :if ([:len $1]=0) do={:return "0b"}
       :local inp [:tonum $1]; :local cnt 0;
       :while ($inp>1000) do={:set $inp ($inp>>10); :set $cnt ($cnt+1)}
-      :return ($inp.[:pick [:toarray "b,Kb,Mb,Gb,Tb,Pb,Eb,Zb,Yb"] $cnt]);
-    }
+      :return ($inp.[:pick [:toarray "b,Kb,Mb,Gb,Tb,Pb,Eb,Zb,Yb"] $cnt])}
     :local routeISP [/ip route find dst-address="0.0.0.0/0"]; :local msg "";
     :if ([:len $routeISP]=0) do={:return "WAN not found"}
     :foreach inetGate in=$routeISP do={
@@ -116,15 +108,11 @@
         /interface;
         :local rxReport [$NumSiPrefix [get [find name=$ifGate] rx-byte]];
         :local txReport [$NumSiPrefix [get [find name=$ifGate] tx-byte]];
-        :set msg "$msg\r\n>>>TraffVia:\r\n'$ifGate'\r\nrx/tx $rxReport/$txReport";
-      }
-    }
+        :set msg "$msg\r\n>>>TraffVia:\r\n'$ifGate'\r\nrx/tx $rxReport/$txReport"}}
     :return $msg;
   }
 
   # main body
   :local message ">>>HealthRep:\r\n$[$GenInfo]$[$PPPInfo]$[$GwInfo]\r\n>>>ExternIp\r\n$[$ExtIP]";
   :log warning $message; :put $message;
-} on-error={
-  :log warning ("Error, can't show health status"); :put ("Error, can't show health status");
-}
+} on-error={:log warning ("Error, can't show health status"); :put ("Error, can't show health status")}
