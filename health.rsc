@@ -26,9 +26,10 @@
     /system health;
     :local volt ([print as-value]->"voltage");
     :local tempC ([print as-value]->"temperature");
-    :do {/system routerboard} on-error={};
-    :local currFW ([print as-value]->"current-firmware");
-    :local upgrFW ([print as-value]->"upgrade-firmware");
+    :local currFW ""; :local upgrFW "";
+    :do {/system routerboard;
+      :set currFW ([print as-value]->"current-firmware");
+      :set upgrFW ([print as-value]->"upgrade-firmware")} on-error={};
     /system resource;
     :local uptime ([print as-value]->"uptime");
     :local arch ([print as-value]->"architecture-name");
