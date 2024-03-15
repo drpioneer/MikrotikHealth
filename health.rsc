@@ -3,7 +3,7 @@
 # https://github.com/drpioneer/MikrotikHealth/blob/main/health.rsc
 # https://forummikrotik.ru/viewtopic.php?p=91302#p91302
 # tested on ROS 6.49.10 & 7.12
-# updated 2024/02/17
+# updated 2024/03/15
 
 :do {
   # external IP address return function (in case of double NAT) # https://forummikrotik.ru/viewtopic.php?p=65345#p65345
@@ -26,7 +26,7 @@
     /system health;
     :local volt ([print as-value]->"voltage");
     :local tempC ([print as-value]->"temperature");
-    /system routerboard;
+    :do {/system routerboard} on-error={};
     :local currFW ([print as-value]->"current-firmware");
     :local upgrFW ([print as-value]->"upgrade-firmware");
     /system resource;
