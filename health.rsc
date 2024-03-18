@@ -3,22 +3,9 @@
 # https://github.com/drpioneer/MikrotikHealth/blob/main/health.rsc
 # https://forummikrotik.ru/viewtopic.php?p=91302#p91302
 # tested on ROS 6.49.10 & 7.12
-# updated 2024/03/15
+# updated 2024/03/18
 
 :do {
-  # external IP address return function (in case of double NAT) # https://forummikrotik.ru/viewtopic.php?p=65345#p65345
-  :local ExtIP do={
-    :local urlString "http://checkip.dyndns.org"; :local httpResp ""; :local cnt 0;
-    :do {
-      :do {:set httpResp [/tool fetch mode=http url=$urlString as-value output=user]} on-error={}
-      :set cnt ($cnt+1);
-    } while ([:len $httpResp]=0 && cnt<4);
-    :if ([:len $httpResp]!=0) do={
-      :local content ($httpResp->"data");
-      :if ([:len $content]!=0) do={:return [:pick $content ([:find $content "dress: " -1] +7) [:find $content "</body>" -1]]}}
-    :return "NotRespond";
-  }
-
   # general info reading function # https://forummikrotik.ru/viewtopic.php?p=45743#p45743
   :local GenInfo do={
     /system identity;
@@ -101,16 +88,28 @@
       :local inp [:tonum $1]; :local cnt 0;
       :while ($inp>1000) do={:set $inp ($inp>>10); :set $cnt ($cnt+1)}
       :return ($inp.[:pick [:toarray "b,Kb,Mb,Gb,Tb,Pb,Eb,Zb,Yb"] $cnt])}
-    :local routeISP [/ip route find dst-address="0.0.0.0/0"]; :local msg "";
-    :if ([:len $routeISP]=0) do={:return "WAN not found"}
+    :local msg ""; :local routeISP [/ip route find dst-address="0.0.0.0/0"];
+    :if ([:len $routeISP]=0) do={:return "\r\n>>>WAN not found"}
     :foreach inetGate in=$routeISP do={
       :local ifGate [:tostr [/ip route get $inetGate vrf-interface]];
       :if ([:len $ifGate]>0) do={
-        /interface;
-        :local rxReport [$NumSiPrefix [get [find name=$ifGate] rx-byte]];
-        :local txReport [$NumSiPrefix [get [find name=$ifGate] tx-byte]];
+        :local rxReport [$NumSiPrefix [/interface get [find name=$ifGate] rx-byte]];
+        :local txReport [$NumSiPrefix [/interface get [find name=$ifGate] tx-byte]];
         :set msg "$msg\r\n>>>TraffVia:\r\n'$ifGate'\r\nrx/tx $rxReport/$txReport"}}
     :return $msg;
+  }
+
+  # external IP address return function (in case of double NAT) # https://forummikrotik.ru/viewtopic.php?p=65345#p65345
+  :local ExtIP do={
+    :local urlString "http://checkip.dyndns.org"; :local httpResp ""; :local cnt 0;
+    :do {
+      :do {:set httpResp [/tool fetch mode=http url=$urlString as-value output=user]} on-error={}
+      :set cnt ($cnt+1);
+    } while ([:len $httpResp]=0 && cnt<4);
+    :if ([:len $httpResp]!=0) do={
+      :local content ($httpResp->"data");
+      :if ([:len $content]!=0) do={:return [:pick $content ([:find $content "dress: " -1]+7) [:find $content "</body>" -1]]}}
+    :return "Unknown";
   }
 
   # main body
