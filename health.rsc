@@ -2,8 +2,8 @@
 # Script uses ideas by Enternight, Jotne, rextended, Sertik, Brook, drPioneer
 # https://github.com/drpioneer/MikrotikHealth/blob/main/health.rsc
 # https://forummikrotik.ru/viewtopic.php?p=91302#p91302
-# tested on ROS 6.49.10 & 7.12
-# updated 2024/03/18
+# tested on ROS 6.49.14 & 7.14.2
+# updated 2024/04/12
 
 :do {
   # general info reading function # https://forummikrotik.ru/viewtopic.php?p=45743#p45743
@@ -45,8 +45,7 @@
       :if ($smplVolt>4 && $smplVolt<53) do={:set msg "$msg\r\nPwr $inVolt V"} else={:set msg "$msg\r\n**bad Pwr $inVolt V"}}
     :if ([:len $tempC]>0) do={
       :if ($tempC<70) do={:set msg "$msg\r\nTemp $tempC C"} else={:set msg "$msg\r\n**abnorm Temp $tempC C"}}
-    :return "$msg\r\nUpt $uptime";
-  }
+    :return "$msg\r\nUpt $uptime"}
 
   # ppp info reading function
   :local PPPInfo do={
@@ -77,8 +76,7 @@
             :if ([:len $vpnComm]>0) do={:set msg "$msg\r\nCmnt $vpnComm"}
             :set msg ("$msg\r\nLcl $locAddr\r\nRmt $remAddr\r\nUpt $upTime");
             :set cnt (cnt+1)}}}}
-    :return $msg;
-  }
+    :return $msg}
 
   # gateways info reading function
   :local GwInfo do={
@@ -88,16 +86,28 @@
       :local inp [:tonum $1]; :local cnt 0;
       :while ($inp>1000) do={:set $inp ($inp>>10); :set $cnt ($cnt+1)}
       :return ($inp.[:pick [:toarray "b,Kb,Mb,Gb,Tb,Pb,Eb,Zb,Yb"] $cnt])}
-    :local msg ""; :local routeISP [/ip route find dst-address="0.0.0.0/0"];
-    :if ([:len $routeISP]=0) do={:return "\r\n>>>WAN not found"}
-    :foreach inetGate in=$routeISP do={
-      :local ifGate [:tostr [/ip route get $inetGate vrf-interface]];
+    # search of interface-list gateway # no input parameters
+    :local GwFinder do={
+      :local routeISP [/ip route find dst-address=0.0.0.0/0 active=yes]; :if ([:len $routeISP]=0) do={:return ""}
+      :set routeISP "/ip route get $routeISP";
+      :local routeGW {"[$routeISP vrf-interface]";"[$routeISP immediate-gw]";"[$routeISP gateway-status]"}
+      /interface;
+      :foreach ifListMemb in=[list member find] do={
+        :local ifIfac [list member get $ifListMemb interface]; :local ifList [list member get $ifListMemb list];
+        :local brName ""; :do {:set brName [bridge port get [find interface=$ifIfac] bridge]} on-error={}
+        :foreach answer in=$routeGW do={
+          :local gw ""; :do {:set gw [:tostr [[:parse $answer]]]} on-error={}
+          :if ([:len $gw]>0 && $gw~$ifIfac or [:len $brName]>0 && $gw~$brName) do={:return $ifList}}}
+      :return ""}
+    :local msg "";
+    :if ([:len [$GwFinder]]=0) do={:return "\r\n>>>WAN not found"}
+    :foreach inetGate in=[/interface list member find list=[$GwFinder]] do={
+      :local ifGate [/interface list member get $inetGate interface];
       :if ([:len $ifGate]>0) do={
         :local rxReport [$NumSiPrefix [/interface get [find name=$ifGate] rx-byte]];
         :local txReport [$NumSiPrefix [/interface get [find name=$ifGate] tx-byte]];
         :set msg "$msg\r\n>>>TraffVia:\r\n'$ifGate'\r\nrx/tx $rxReport/$txReport"}}
-    :return $msg;
-  }
+    :return $msg}
 
   # external IP address return function (in case of double NAT) # https://forummikrotik.ru/viewtopic.php?p=65345#p65345
   :local ExtIP do={
@@ -109,8 +119,7 @@
     :if ([:len $httpResp]!=0) do={
       :local content ($httpResp->"data");
       :if ([:len $content]!=0) do={:return [:pick $content ([:find $content "dress: " -1]+7) [:find $content "</body>" -1]]}}
-    :return "Unknown";
-  }
+    :return "Unknown"}
 
   # main body
   :local message ">>>HealthRep:\r\n$[$GenInfo]$[$PPPInfo]$[$GwInfo]\r\n>>>ExternIp\r\n$[$ExtIP]";
