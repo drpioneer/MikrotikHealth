@@ -3,7 +3,7 @@
 # https://github.com/drpioneer/MikrotikHealth/blob/main/health.rsc
 # https://forummikrotik.ru/viewtopic.php?p=91302#p91302
 # tested on ROS 6.49.14 & 7.14.2
-# updated 2024/04/12
+# updated 2024/04/27
 
 :do {
   # general info reading function # https://forummikrotik.ru/viewtopic.php?p=45743#p45743
@@ -80,12 +80,14 @@
 
   # gateways info reading function
   :local GwInfo do={
+
     # digit conversion function via SI-prefix # https://forum.mikrotik.com/viewtopic.php?t=182904#p910512
     :local NumSiPrefix do={
       :if ([:len $1]=0) do={:return "0b"}
       :local inp [:tonum $1]; :local cnt 0;
       :while ($inp>1000) do={:set $inp ($inp>>10); :set $cnt ($cnt+1)}
       :return ($inp.[:pick [:toarray "b,Kb,Mb,Gb,Tb,Pb,Eb,Zb,Yb"] $cnt])}
+
     # search of interface-list gateway # no input parameters
     :local GwFinder do={
       :local routeISP [/ip route find dst-address=0.0.0.0/0 active=yes]; :if ([:len $routeISP]=0) do={:return ""}
@@ -99,11 +101,12 @@
           :local gw ""; :do {:set gw [:tostr [[:parse $answer]]]} on-error={}
           :if ([:len $gw]>0 && $gw~$ifIfac or [:len $brName]>0 && $gw~$brName) do={:return $ifList}}}
       :return ""}
+
     :local msg "";
     :if ([:len [$GwFinder]]=0) do={:return "\r\n>>>WAN not found"}
     :foreach inetGate in=[/interface list member find list=[$GwFinder]] do={
       :local ifGate [/interface list member get $inetGate interface];
-      :if ([:len $ifGate]>0) do={
+      :if ([/interface find name=$ifGate]!="") do={
         :local rxReport [$NumSiPrefix [/interface get [find name=$ifGate] rx-byte]];
         :local txReport [$NumSiPrefix [/interface get [find name=$ifGate] tx-byte]];
         :set msg "$msg\r\n>>>TraffVia:\r\n'$ifGate'\r\nrx/tx $rxReport/$txReport"}}
