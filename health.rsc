@@ -2,8 +2,8 @@
 # Script uses ideas by Enternight, Jotne, rextended, Sertik, Brook, drPioneer
 # https://github.com/drpioneer/MikrotikHealth/blob/main/health.rsc
 # https://forummikrotik.ru/viewtopic.php?p=91302#p91302
-# tested on ROS 6.49.14 & 7.14.2
-# updated 2024/04/27
+# tested on ROS 6.49.17 & 7.16
+# updated 2024/10/21
 
 :do {
   # general info reading function # https://forummikrotik.ru/viewtopic.php?p=45743#p45743
@@ -39,7 +39,8 @@
     :set hddFree ($hddFree/($hddTotal/100));
     :if ($hddFree>6) do={:set msg "$msg\r\nHddFree $hddFree%"} else={:set msg "$msg\r\n**low free Hdd $hddFree%"}
     :if ([:len $badBlock]>0) do={
-      :if ($badBlock=0) do={:set msg "$msg\r\nBadBlck $badBlock%"} else={:set msg "$msg\r\n**present Bad blocks $badBlock%"}}
+      :local smplBb ($badBlock/10); :local lowBb (($badBlock-$smplBb*10)*10); :local inBb "$smplBb.$[:pick $lowBb 0 3]";
+      :if ($badBlock=0) do={:set msg "$msg\r\nBadBlck 0%"} else={:set msg "$msg\r\n**present BadBlck $inBb%"}}
     :if ([:len $volt]>0) do={
       :local smplVolt ($volt/10); :local lowVolt (($volt-$smplVolt*10)*10); :local inVolt "$smplVolt.$[:pick $lowVolt 0 3]";
       :if ($smplVolt>4 && $smplVolt<53) do={:set msg "$msg\r\nPwr $inVolt V"} else={:set msg "$msg\r\n**bad Pwr $inVolt V"}}
